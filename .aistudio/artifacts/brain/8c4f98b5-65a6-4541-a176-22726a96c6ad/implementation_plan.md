@@ -87,8 +87,14 @@ AutoFlow is a modular Android task automation app designed to automate app launc
 ```
 
 ### Key Entities
-1. `AutomationRule`: Represents an automation rule (`id`, `title`, `isEnabled`, `triggerType`, `triggerConfigJson`, `actionType`, `actionConfigJson`, `lastExecutedMs`).
+1. `AutomationRule`: Represents an automation rule (`id`, `title`, `isEnabled`, `triggerType`, `triggerPackageName`, `exitTriggerType`, `exitTriggerPackageName`, `actionType`, `actionValue`, `lastExecutedMs`).
 2. `ExecutionLog`: Record of rule execution (`id`, `ruleId`, `ruleTitle`, `timestampMs`, `status`, `detail`).
 3. `PermissionStatus`: Represents permission item state (`permissionType`, `isGranted`, `systemIntentAction`).
 
----
+### 5. Exit Trigger & Task Destruction Behavior
+- **Trigger**: App Launch starts the task (e.g., 5-minute countdown "5分钟后放下手机").
+- **Exit Trigger (退出条件)**: When user leaves or exits the monitored target app (`ExitTriggerType.APP_EXIT`):
+  - **Immediate Termination**: The entire task is automatically stopped and destroyed immediately.
+  - **Zero Waiting / No Continuation**: Canceled without any 10-second grace period or background continuation. Notifications and active ringtones are cleared immediately.
+  - **Status & Logging**: Logged with status "已销毁", and concise UI Toast alerts the user that the task has been destroyed.
+

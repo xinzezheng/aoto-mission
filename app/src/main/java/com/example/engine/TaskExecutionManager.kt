@@ -170,6 +170,32 @@ class TaskExecutionManager(
         }
     }
 
+    /**
+     * 当满足退出条件时，直接中断并彻底销毁该规则关联的任务，停止所有计时与后续动作
+     */
+    fun destroyOrInterruptRule(rule: AutomationRule, exitReason: String) {
+        coroutineScope.launch {
+            // 如果此任务触发了倒计时或正在运行，立即停止并销毁倒计时
+            if (ActiveCountdownManager.countdownState.value.ruleId == rule.id || rule.actionType == ActionType.SET_ALARM) {
+                ActiveCountdownManager.stopCountdown(context)
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "🛑 满足退出条件，任务【${rule.title}】已自动销毁停止", Toast.LENGTH_SHORT).show()
+            }
+
+            val log = ExecutionLog(
+                ruleId = rule.id,
+                ruleTitle = rule.title,
+                triggerType = rule.triggerType,
+                actionType = rule.actionType,
+                status = "已销毁",
+                detailMessage = "满足退出条件（$exitReason），任务已自动中断并销毁，停止计时与执行"
+            )
+            repository.insertLog(log)
+        }
+    }
+
     private fun sendCustomNotification(title: String, text: String) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "autoflow_custom_task_channel"

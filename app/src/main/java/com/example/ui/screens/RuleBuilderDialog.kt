@@ -219,7 +219,7 @@ fun RuleBuilderDialog(
                 ) {
                     OutlinedTextField(
                         value = when (exitTriggerType) {
-                            ExitTriggerType.APP_EXIT -> "退出应用 (离开所选应用时结束)"
+                            ExitTriggerType.APP_EXIT -> "退出应用 (离开所选应用时立即销毁中断任务)"
                             ExitTriggerType.NONE -> "无退出条件 (运行至完成或手动停止)"
                             ExitTriggerType.TIMEOUT -> "超时自动结束"
                         },
@@ -237,7 +237,7 @@ fun RuleBuilderDialog(
                         onDismissRequest = { exitTriggerExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("退出应用 (离开所选应用时结束)") },
+                            text = { Text("退出应用 (离开所选应用时立即销毁中断任务)") },
                             onClick = { exitTriggerType = ExitTriggerType.APP_EXIT; exitTriggerExpanded = false }
                         )
                         DropdownMenuItem(
@@ -442,7 +442,7 @@ fun RuleBuilderDialog(
                             val finalTitle = title.ifEmpty {
                                 "打开 $startAppText 触发 -> $actionTextDesc"
                             }
-                            val finalDesc = "启动: 打开 $startAppText | 结束条件: ${if (exitTriggerType == ExitTriggerType.APP_EXIT) "退出 $exitAppText" else "手动/完成"} | 执行: $actionTextDesc"
+                            val finalDesc = "启动: 打开 $startAppText | 结束: ${if (exitTriggerType == ExitTriggerType.APP_EXIT) "退出 $exitAppText (自动销毁任务)" else "手动/完成"} | 执行: $actionTextDesc"
 
                             val finalExitPackage = if (exitTriggerType == ExitTriggerType.APP_EXIT) {
                                 if (exitTriggerPackageName.isNotEmpty()) exitTriggerPackageName else triggerPackageName

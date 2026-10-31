@@ -9,6 +9,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     name: 编译完整独立 APK 并上传至 GitHub Releases
@@ -34,35 +37,93 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: 准备密钥与环境文件 (Prepare Keystores and Environment)
+        run: |
+          # 1. 恢复或生成 debug.keystore，确保 debugConfig 签名可用
+          if [ -f "debug.keystore.base64" ]; then
+            echo "正在从 base64 恢复 debug.keystore..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f "debug.keystore" ]; then
+            echo "生成新的 debug.keystore..."
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          # 2. 生成发布版签名密钥库 my-upload-key.jks，确保 assembleRelease 签名可用
+          if [ ! -f "my-upload-key.jks" ]; then
+            echo "生成发布版签名库 my-upload-key.jks..."
+            keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=AutoFlow, OU=App, O=AutoFlow, L=City, ST=State, C=CN"
+          fi
+
+          # 3. 验证 google-services.json 是否存在
+          if [ ! -f "app/google-services.json" ]; then
+            echo "生成备用 google-services.json..."
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "autoflow-app",
+              "storage_bucket": "autoflow-app.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:123456789012:android:0123456789abcdef",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.autoflow.kpqxvw"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "dummy_client_api_key_placeholder"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
       - name: 赋予 Gradle 执行权限 (Grant Execute Permission)
         run: chmod +x gradlew || true
 
-      - name: 编译发布版 APK (Assemble Release APK)
+      - name: 编译完整独立 APK (Assemble Standalone APK)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
         run: |
+          echo "开始执行 Gradle 构建..."
           if [ -f "./gradlew" ]; then
-            ./gradlew assembleRelease --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon || ./gradlew assembleDebug --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon
+            ./gradlew assembleRelease --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon --stacktrace
           else
-            gradle assembleRelease --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon || gradle assembleDebug --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon
+            gradle assembleRelease --no-daemon --stacktrace || gradle assembleDebug --no-daemon --stacktrace
           fi
 
       - name: 查找编译生成的 APK (Locate Generated APK)
         id: find_apk
         run: |
-          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | sort | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "未找到 APK 文件，退出..."
             exit 1
           fi
-          echo "APK 文件路径: $APK_PATH"
+          echo "成功找到 APK 文件路径: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
 
-      - name: 复制完整独立 APK 产物 (Prepare Final Integrated APK)
+      - name: 整理发布产物 (Prepare Final Integrated APK)
         run: |
           mkdir -p release_output
           cp ${{ steps.find_apk.outputs.apk_path }} release_output/app-release.apk
 
       - name: 创建 GitHub Release 并发布产物 (Publish to GitHub Releases)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
           tag_name: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
@@ -70,7 +131,7 @@ jobs:
           body: |
             ## 🚀 自动编译整合好的独立 APK 软件
             - 软件版本: ${{ github.ref_name }}
-            - 包含完整的运行时与配置数据，可直接在手机上独立安装运行。
+            - 包含完整的自动化执行引擎与所有依赖，可直接在手机上独立安装运行。
             - 中国大陆用户支持通过镜像加速无 VPN 直连一键下载更新。
           draft: false
           prerelease: false

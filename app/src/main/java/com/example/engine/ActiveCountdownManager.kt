@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 data class CountdownState(
     val ruleId: Long = 0,
     val ruleTitle: String = "",
+    val targetPackages: List<String> = emptyList(),
     val totalSeconds: Int = 0,
     val remainingSeconds: Int = 0,
     val isRunning: Boolean = false,
@@ -33,66 +34,65 @@ object ActiveCountdownManager {
 
     private val scope = CoroutineScope(Dispatchers.IO)
     private var timerJob: Job? = null
-    private var gracePeriodJob: Job? = null
     private var activeRingtone: Ringtone? = null
 
     private var currentActiveRuleId: Long? = null
+    private var currentActiveRule: AutomationRule? = null
     private var isTargetAppInForeground: Boolean = false
 
     private val _countdownState = MutableStateFlow(CountdownState())
     val countdownState: StateFlow<CountdownState> = _countdownState.asStateFlow()
 
     fun handleAppOpened(context: Context, rule: AutomationRule) {
-        gracePeriodJob?.cancel()
-        gracePeriodJob = null
-
         isTargetAppInForeground = true
+        currentActiveRuleId = rule.id
+        currentActiveRule = rule
 
+        val targetPkgs = rule.triggerPackageName.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        startCountdown(context, rule, rule.actionValue.coerceAtLeast(1), targetPkgs)
+    }
+
+    /**
+     * 当检测到用户退出应用（满足退出条件）时：
+     * 立即中断并完全销毁该任务，彻底停止计时与后续执行，不进行任何等待或后台继续计时。
+     */
+    fun handleAppExited(context: Context, reason: String = "用户已退出应用") {
         val currentState = _countdownState.value
-        if (currentState.isRunning && currentActiveRuleId == rule.id && currentState.remainingSeconds > 0) {
-            // User returned within 10s grace period -> seamlessly continue countdown without extra toast
+        if (!currentState.isRunning && !currentState.isRinging) {
             return
         }
 
-        // Fresh countdown start or rule changed
-        currentActiveRuleId = rule.id
-        startCountdown(context, rule, rule.actionValue.coerceAtLeast(1))
-    }
+        // 立即完全销毁并停止任务
+        stopCountdown(context)
 
-    fun handleAppExited(context: Context) {
-        if (!isTargetAppInForeground) return
-        isTargetAppInForeground = false
-
-        val currentState = _countdownState.value
-        if (currentState.isRunning && currentState.remainingSeconds > 0) {
-            scope.launch(Dispatchers.Main) {
-                Toast.makeText(context, "⏳ 请在10秒内回到软件", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // 10-second grace period timer
-        gracePeriodJob?.cancel()
-        gracePeriodJob = scope.launch {
-            delay(10000L) // Wait 10 seconds
-            if (!isTargetAppInForeground) {
-                // User stayed away > 10s -> stop countdown cleanly without prompting restart
-                withContext(Dispatchers.Main) {
-                    stopCountdown(context)
-                }
-            }
+        scope.launch(Dispatchers.Main) {
+            Toast.makeText(context, "🛑 检测到退出应用，任务已自动销毁停止", Toast.LENGTH_SHORT).show()
         }
     }
 
-    fun startCountdown(context: Context, rule: AutomationRule, overrideMinutes: Int? = null) {
+    fun startCountdown(
+        context: Context,
+        rule: AutomationRule,
+        overrideMinutes: Int? = null,
+        targetPackages: List<String> = emptyList()
+    ) {
         val durationMinutes = overrideMinutes ?: rule.actionValue.coerceAtLeast(1)
         val totalSec = durationMinutes * 60
 
         stopCountdownInternal(context)
 
+        val packages = if (targetPackages.isNotEmpty()) {
+            targetPackages
+        } else {
+            rule.triggerPackageName.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        }
+
         currentActiveRuleId = rule.id
+        currentActiveRule = rule
         _countdownState.value = CountdownState(
             ruleId = rule.id,
             ruleTitle = rule.title,
+            targetPackages = packages,
             totalSeconds = totalSec,
             remainingSeconds = totalSec,
             isRunning = true,
@@ -169,9 +169,8 @@ object ActiveCountdownManager {
     }
 
     fun stopCountdown(context: Context) {
-        gracePeriodJob?.cancel()
-        gracePeriodJob = null
         currentActiveRuleId = null
+        currentActiveRule = null
         isTargetAppInForeground = false
         stopCountdownInternal(context)
     }

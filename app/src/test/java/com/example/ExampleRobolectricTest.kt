@@ -57,4 +57,34 @@ class ExampleRobolectricTest {
         assertNotNull(queried)
         assertEquals("App Launch Rule Test", queried?.title)
     }
+
+    @Test
+    fun testAppExitDestroysTaskImmediately() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val rule = AutomationRule(
+            id = 101L,
+            title = "抖音5分钟放下手机",
+            description = "测试",
+            triggerType = TriggerType.APP_LAUNCH,
+            triggerPackageName = "com.ss.android.ugc.aweme",
+            exitTriggerType = com.example.data.ExitTriggerType.APP_EXIT,
+            exitTriggerPackageName = "com.ss.android.ugc.aweme",
+            actionType = ActionType.SET_ALARM,
+            actionValue = 5
+        )
+
+        // 1. 打开应用，启动倒计时
+        com.example.engine.ActiveCountdownManager.handleAppOpened(context, rule)
+        val activeState = com.example.engine.ActiveCountdownManager.countdownState.value
+        assertEquals(true, activeState.isRunning)
+        assertEquals(300, activeState.totalSeconds)
+
+        // 2. 模拟用户退出应用，触发退出条件
+        com.example.engine.ActiveCountdownManager.handleAppExited(context, "退出应用测试")
+
+        // 3. 验证任务被立即销毁并停止，不再继续计时
+        val afterExitState = com.example.engine.ActiveCountdownManager.countdownState.value
+        assertEquals(false, afterExitState.isRunning)
+        assertEquals(0, afterExitState.remainingSeconds)
+    }
 }
