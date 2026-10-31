@@ -40,9 +40,9 @@ jobs:
       - name: 编译发布版 APK (Assemble Release APK)
         run: |
           if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --no-daemon
+            ./gradlew assembleRelease --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon || ./gradlew assembleDebug --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon
           else
-            gradle assembleDebug --no-daemon
+            gradle assembleRelease --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon || gradle assembleDebug --no-daemon -Pksp.use.daemon.fallback=false -Pkotlin.compiler.execution.strategy=daemon
           fi
 
       - name: 查找编译生成的 APK (Locate Generated APK)
@@ -50,9 +50,8 @@ jobs:
         run: |
           APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "未找到 APK 文件，尝试强制打包..."
-            gradle assembleRelease --no-daemon || true
-            APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+            echo "未找到 APK 文件，退出..."
+            exit 1
           fi
           echo "APK 文件路径: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT

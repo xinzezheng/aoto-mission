@@ -34,13 +34,30 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         Log.d("AutoFlowAccessibility", "无障碍服务连接成功")
     }
 
+    private fun isInputMethodPackage(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        val lower = packageName.lowercase()
+        if (lower.contains("inputmethod") || lower.contains("keyboard") || lower.contains("ime") || lower.contains("pinyin") || lower.contains("shuru")) {
+            return true
+        }
+        return try {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            val enabledImes = imm?.enabledInputMethodList ?: emptyList()
+            val allImes = imm?.inputMethodList ?: emptyList()
+            enabledImes.any { it.packageName.equals(packageName, ignoreCase = true) } ||
+                    allImes.any { it.packageName.equals(packageName, ignoreCase = true) }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
 
-            if (packageName == this.packageName || systemUiPackages.contains(packageName)) {
+            if (packageName == this.packageName || systemUiPackages.contains(packageName) || isInputMethodPackage(packageName)) {
                 return
             }
 

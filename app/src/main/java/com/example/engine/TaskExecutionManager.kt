@@ -56,10 +56,9 @@ class TaskExecutionManager(
                 when (rule.actionType) {
                     ActionType.SET_ALARM -> {
                         // User explicitly selected Countdown Alarm Action
-                        val minutes = rule.actionValue.coerceAtLeast(1)
                         ActiveCountdownManager.handleAppOpened(context, rule)
                         isSuccess = true
-                        message = "已开启 ${minutes} 分钟倒计时响铃"
+                        message = "5分钟后放下手机"
                     }
 
                     ActionType.LAUNCH_APP -> {

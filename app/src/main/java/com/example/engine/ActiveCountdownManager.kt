@@ -50,32 +50,32 @@ object ActiveCountdownManager {
 
         val currentState = _countdownState.value
         if (currentState.isRunning && currentActiveRuleId == rule.id && currentState.remainingSeconds > 0) {
-            // Re-entered target app within grace period -> keep existing countdown progress!
-            scope.launch(Dispatchers.Main) {
-                Toast.makeText(context, "⚡ 5分钟后放下手机", Toast.LENGTH_SHORT).show()
-            }
+            // User returned within 10s grace period -> seamlessly continue countdown without extra toast
             return
         }
 
         // Fresh countdown start or rule changed
         currentActiveRuleId = rule.id
         startCountdown(context, rule, rule.actionValue.coerceAtLeast(1))
-
-        scope.launch(Dispatchers.Main) {
-            Toast.makeText(context, "⚡ 5分钟后放下手机", Toast.LENGTH_SHORT).show()
-        }
     }
 
     fun handleAppExited(context: Context) {
         if (!isTargetAppInForeground) return
         isTargetAppInForeground = false
 
+        val currentState = _countdownState.value
+        if (currentState.isRunning && currentState.remainingSeconds > 0) {
+            scope.launch(Dispatchers.Main) {
+                Toast.makeText(context, "⏳ 请在10秒内回到软件", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // 10-second grace period timer
         gracePeriodJob?.cancel()
         gracePeriodJob = scope.launch {
             delay(10000L) // Wait 10 seconds
             if (!isTargetAppInForeground) {
-                // User really exited for more than 10 seconds -> stop countdown
+                // User stayed away > 10s -> stop countdown cleanly without prompting restart
                 withContext(Dispatchers.Main) {
                     stopCountdown(context)
                 }
@@ -100,6 +100,10 @@ object ActiveCountdownManager {
         )
 
         showCountdownNotification(context, totalSec)
+
+        scope.launch(Dispatchers.Main) {
+            Toast.makeText(context, "⚡ 5分钟后放下手机", Toast.LENGTH_SHORT).show()
+        }
 
         timerJob = scope.launch {
             var currentRemaining = totalSec
