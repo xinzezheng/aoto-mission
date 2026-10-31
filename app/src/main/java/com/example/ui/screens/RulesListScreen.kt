@@ -123,7 +123,6 @@ fun RulesListScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Fixed Button Layout: Single line "+ 新增规则"
                     Button(
                         onClick = onCreateRuleClick,
                         shape = RoundedCornerShape(12.dp),
@@ -264,7 +263,6 @@ fun ActiveCountdownCard(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Fixed Stop Button: Non-clipped single line
                 Button(
                     onClick = onStop,
                     colors = ButtonDefaults.buttonColors(
@@ -287,7 +285,6 @@ fun ActiveCountdownCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Large Digital Countdown Clock Display
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -431,7 +428,6 @@ fun RuleCardItem(
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Fixed Test Button: "测试" label, non-truncated
                     Button(
                         onClick = onExecute,
                         shape = RoundedCornerShape(10.dp),
@@ -510,7 +506,7 @@ fun EmptyRulesState(onCreateRuleClick: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "点击下方按钮创建规则，支持打开抖音、TikTok、小红书、B站等应用时自动开始 5 分钟倒计时响铃。",
+            text = "点击下方按钮创建规则，支持打开或退出应用时自动触发各类自定义任务。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -537,8 +533,30 @@ fun TriggerChip(type: TriggerType) {
     val (label, bg, fg) = when (type) {
         TriggerType.APP_LAUNCH -> Triple("打开应用触发", Color(0xFFE0F2FE), Color(0xFF0369A1))
         TriggerType.SCHEDULED_TIME -> Triple("定时时刻触发", Color(0xFFFEF3C7), Color(0xFFB45309))
-        TriggerType.COUNTDOWN_TIMER -> Triple("倒计时响铃", Color(0xFFFEE2E2), Color(0xFFB91C1C))
+        TriggerType.COUNTDOWN_TIMER -> Triple("倒计时响铃", Color(0xFFFEF3C7), Color(0xFFB45309))
         TriggerType.MANUAL -> Triple("手动测试", Color(0xFFF3E8FF), Color(0xFF6B21A8))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = bg
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = fg
+        )
+    }
+}
+
+@Composable
+fun ExitTriggerChip(type: com.example.data.ExitTriggerType) {
+    val (label, bg, fg) = when (type) {
+        com.example.data.ExitTriggerType.NONE -> Triple("无退出条件", Color(0xFFF1F5F9), Color(0xFF64748B))
+        com.example.data.ExitTriggerType.APP_EXIT -> Triple("退出应用结束", Color(0xFFFEE2E2), Color(0xFF991B1B))
+        com.example.data.ExitTriggerType.TIMEOUT -> Triple("超时自动结束", Color(0xFFFEF3C7), Color(0xFFB45309))
     }
 
     Surface(

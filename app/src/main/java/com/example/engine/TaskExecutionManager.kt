@@ -30,17 +30,17 @@ class TaskExecutionManager(
     fun checkAndPromptPermissionsForExecution(): Boolean {
         if (!permissionManager.areNotificationsEnabled()) {
             Toast.makeText(context, "缺少【通知权限】，请在设置中开启通知以展示提示与响铃", Toast.LENGTH_LONG).show()
-            permissionManager.openPermissionSettings(
-                permissionManager.checkAllPermissions().first { it.id == "NOTIFICATION" }
-            )
+            permissionManager.checkAllPermissions().firstOrNull { it.id == "NOTIFICATION" }?.let {
+                permissionManager.openPermissionSettings(it)
+            }
             return false
         }
 
         if (!permissionManager.canScheduleExactAlarms()) {
             Toast.makeText(context, "缺少【精确闹钟】权限，请在设置中允许设置闹钟", Toast.LENGTH_LONG).show()
-            permissionManager.openPermissionSettings(
-                permissionManager.checkAllPermissions().first { it.id == "EXACT_ALARM" }
-            )
+            permissionManager.checkAllPermissions().firstOrNull { it.id == "EXACT_ALARM" }?.let {
+                permissionManager.openPermissionSettings(it)
+            }
             return false
         }
 
@@ -111,9 +111,9 @@ class TaskExecutionManager(
                             isSuccess = false
                             message = "缺少【修改系统设置】权限"
                             withContext(Dispatchers.Main) {
-                                permissionManager.openPermissionSettings(
-                                    permissionManager.checkAllPermissions().first { it.id == "WRITE_SETTINGS" }
-                                )
+                                permissionManager.checkAllPermissions().firstOrNull { it.id == "WRITE_SETTINGS" }?.let {
+                                    permissionManager.openPermissionSettings(it)
+                                }
                             }
                         }
                     }
@@ -136,9 +136,9 @@ class TaskExecutionManager(
                             isSuccess = false
                             message = "无障碍服务未开启，已为您打开无障碍设置"
                             withContext(Dispatchers.Main) {
-                                permissionManager.openPermissionSettings(
-                                    permissionManager.checkAllPermissions().first { it.id == "ACCESSIBILITY" }
-                                )
+                                permissionManager.checkAllPermissions().firstOrNull { it.id == "ACCESSIBILITY" }?.let {
+                                    permissionManager.openPermissionSettings(it)
+                                }
                             }
                         }
                     }

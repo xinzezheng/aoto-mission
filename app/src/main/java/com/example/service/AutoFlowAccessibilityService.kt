@@ -18,7 +18,6 @@ class AutoFlowAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var lastPackageName: String? = null
 
-    // System packages that should be ignored (e.g. Status bar, notification shade, system dialogues)
     private val systemUiPackages = setOf(
         "com.android.systemui",
         "com.miui.notification",
@@ -41,52 +40,64 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
 
-            // Ignore self and system UI shade events (e.g., pulling down status bar / notifications)
             if (packageName == this.packageName || systemUiPackages.contains(packageName)) {
                 return
             }
 
-            if (packageName == lastPackageName) {
+            val previousPackage = lastPackageName
+            if (packageName == previousPackage) {
                 return
             }
 
             lastPackageName = packageName
 
             serviceScope.launch {
-                processPackageChange(packageName)
+                processPackageChange(previousPackage, packageName)
             }
         }
     }
 
-    private suspend fun processPackageChange(packageName: String) {
+    private suspend fun processPackageChange(previousPackage: String?, currentPackage: String) {
         val database = AppDatabase.getInstance(applicationContext)
         val repository = AutomationRepository(database.automationDao())
+        val executionManager = TaskExecutionManager(applicationContext, repository)
 
         val activeRules = repository.getActiveRulesList()
-        val matchingRule = activeRules.firstOrNull { rule ->
-            if (rule.triggerType != TriggerType.APP_LAUNCH) return@firstOrNull false
 
+        // 1. Check APP_LAUNCH rules for currentPackage
+        val launchRules = activeRules.filter { rule ->
+            if (rule.triggerType != TriggerType.APP_LAUNCH) return@filter false
             val targetPackages = rule.triggerPackageName.split(",").map { it.trim() }
-            val isPackageMatch = targetPackages.any { target ->
-                target.isNotEmpty() && (packageName.equals(target, ignoreCase = true) || packageName.contains(target, ignoreCase = true))
+            targetPackages.any { target ->
+                target.isNotEmpty() && (currentPackage.equals(target, ignoreCase = true) || currentPackage.contains(target, ignoreCase = true))
             }
-
-            val isKeywordMatch = when {
-                packageName.contains("aweme", ignoreCase = true) -> true
-                packageName.contains("musically", ignoreCase = true) -> true
-                packageName.contains("xhs", ignoreCase = true) || packageName.contains("xingin", ignoreCase = true) -> true
-                packageName.contains("bili", ignoreCase = true) -> true
-                else -> false
-            }
-
-            rule.triggerPackageName.isEmpty() || isPackageMatch || isKeywordMatch
         }
 
-        if (matchingRule != null) {
-            Log.d("AutoFlowAccessibility", "进入目标应用: $packageName")
-            ActiveCountdownManager.handleAppOpened(applicationContext, matchingRule)
+        for (rule in launchRules) {
+            Log.d("AutoFlowAccessibility", "触发【打开应用】规则: ${rule.title} ($currentPackage)")
+            executionManager.executeRule(rule, "打开应用: $currentPackage")
+        }
+
+        // 2. Check APP_EXIT rules for previousPackage
+        if (!previousPackage.isNullOrEmpty()) {
+            val exitRules = activeRules.filter { rule ->
+                if (rule.exitTriggerType != com.example.data.ExitTriggerType.APP_EXIT) return@filter false
+                val targetPackages = rule.exitTriggerPackageName.ifEmpty { rule.triggerPackageName }.split(",").map { it.trim() }
+                targetPackages.any { target ->
+                    target.isNotEmpty() && (previousPackage.equals(target, ignoreCase = true) || previousPackage.contains(target, ignoreCase = true))
+                }
+            }
+
+            for (rule in exitRules) {
+                Log.d("AutoFlowAccessibility", "触发【退出应用】规则: ${rule.title} ($previousPackage)")
+                executionManager.executeRule(rule, "退出应用: $previousPackage")
+            }
+        }
+
+        // Countdown manager tracking
+        if (launchRules.any { it.actionType == com.example.data.ActionType.SET_ALARM }) {
+            ActiveCountdownManager.handleAppOpened(applicationContext, launchRules.first { it.actionType == com.example.data.ActionType.SET_ALARM })
         } else {
-            Log.d("AutoFlowAccessibility", "离开目标应用: $packageName")
             ActiveCountdownManager.handleAppExited(applicationContext)
         }
     }

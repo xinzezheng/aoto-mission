@@ -30,9 +30,15 @@ data class UpdateInfo(
 
 object AppUpdateManager {
 
-    const val GITHUB_REPO_URL = "https://github.com/xinzezheng/Aotomission"
-    private const val GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/xinzezheng/Aotomission/releases/latest"
-    private const val GITHUB_DIRECT_APK_FALLBACK = "https://github.com/xinzezheng/Aotomission/releases/latest/download/app-release.apk"
+    const val GITHUB_REPO_URL = "https://github.com/xinzezheng/aoto-mission"
+    private const val GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/xinzezheng/aoto-mission/releases/latest"
+
+    // High-speed CDN mirror accelerators for China Mainland users (No VPN required)
+    private val CHINA_CDN_MIRRORS = listOf(
+        "https://ghfast.top/https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk",
+        "https://ghproxy.net/https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk",
+        "https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk"
+    )
 
     private val _updateState = MutableStateFlow(UpdateInfo())
     val updateState: StateFlow<UpdateInfo> = _updateState.asStateFlow()
@@ -57,40 +63,40 @@ object AppUpdateManager {
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
                 connection.setRequestProperty("User-Agent", "AutoFlow-Android")
-                connection.connectTimeout = 8000
-                connection.readTimeout = 8000
+                connection.connectTimeout = 6000
+                connection.readTimeout = 6000
 
                 if (connection.responseCode == 200) {
                     val responseJson = connection.inputStream.bufferedReader().use { it.readText() }
                     val jsonObject = JSONObject(responseJson)
                     val tagName = jsonObject.optString("tag_name", "v1.0.0")
 
-                    var apkUrl = ""
+                    var rawApkUrl = ""
                     val assetsArray = jsonObject.optJSONArray("assets")
                     if (assetsArray != null) {
                         for (i in 0 until assetsArray.length()) {
                             val asset = assetsArray.getJSONObject(i)
                             val name = asset.optString("name", "")
                             if (name.endsWith(".apk", ignoreCase = true)) {
-                                apkUrl = asset.optString("browser_download_url", "")
+                                rawApkUrl = asset.optString("browser_download_url", "")
                                 break
                             }
                         }
                     }
 
-                    if (apkUrl.isEmpty()) {
-                        apkUrl = GITHUB_DIRECT_APK_FALLBACK
+                    if (rawApkUrl.isEmpty()) {
+                        rawApkUrl = "https://github.com/xinzezheng/aoto-mission/releases/download/$tagName/app-release.apk"
                     }
 
                     _updateState.value = _updateState.value.copy(
                         latestTagName = tagName,
-                        apkDownloadUrl = apkUrl,
+                        apkDownloadUrl = rawApkUrl,
                         isChecking = false
                     )
                 } else {
                     _updateState.value = _updateState.value.copy(
                         latestTagName = "最新版",
-                        apkDownloadUrl = GITHUB_DIRECT_APK_FALLBACK,
+                        apkDownloadUrl = CHINA_CDN_MIRRORS.first(),
                         isChecking = false
                     )
                 }
@@ -98,31 +104,33 @@ object AppUpdateManager {
                 _updateState.value = _updateState.value.copy(
                     isChecking = false,
                     latestTagName = "最新版",
-                    apkDownloadUrl = GITHUB_DIRECT_APK_FALLBACK
+                    apkDownloadUrl = CHINA_CDN_MIRRORS.first()
                 )
             }
         }
     }
 
     suspend fun downloadAndInstallApk(context: Context) {
-        // Request未知应用安装权限 (Android 8.0+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.packageManager.canRequestPackageInstalls()) {
+            val canInstall = try { context.packageManager.canRequestPackageInstalls() } catch (_: Exception) { true }
+            if (!canInstall) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "请先在设置中开启【允许安装未知应用】权限", Toast.LENGTH_LONG).show()
                 }
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(intent)
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) { }
                 return
             }
         }
 
         var downloadUrl = _updateState.value.apkDownloadUrl
         if (downloadUrl.isEmpty()) {
-            downloadUrl = GITHUB_DIRECT_APK_FALLBACK
+            downloadUrl = CHINA_CDN_MIRRORS.first()
         }
 
         _updateState.value = _updateState.value.copy(
@@ -132,75 +140,96 @@ object AppUpdateManager {
         )
 
         withContext(Dispatchers.IO) {
-            try {
-                val apkFile = File(context.externalCacheDir ?: context.cacheDir, "Aotomission_update.apk")
-                if (apkFile.exists()) apkFile.delete()
+            val downloadUrlsToTry = mutableListOf<String>()
 
-                val url = URL(downloadUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("User-Agent", "AutoFlow-Android")
-                connection.instanceFollowRedirects = true
-                connection.connectTimeout = 15000
-                connection.readTimeout = 20000
+            if (downloadUrl.isNotEmpty() && downloadUrl.endsWith(".apk")) {
+                downloadUrlsToTry.add("https://ghfast.top/$downloadUrl")
+                downloadUrlsToTry.add("https://ghproxy.net/$downloadUrl")
+                downloadUrlsToTry.add(downloadUrl)
+            }
+            downloadUrlsToTry.addAll(CHINA_CDN_MIRRORS)
 
-                // Handle HTTP redirects (GitHub Releases redirect to S3 storage)
-                var redirectConnection = connection
-                var status = redirectConnection.responseCode
-                var redirectCount = 0
-                while ((status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == HttpURLConnection.HTTP_SEE_OTHER || status == 307 || status == 308) && redirectCount < 5) {
-                    val newUrl = redirectConnection.getHeaderField("Location")
-                    redirectConnection.disconnect()
-                    val targetUrl = URL(newUrl)
-                    redirectConnection = targetUrl.openConnection() as HttpURLConnection
-                    redirectConnection.setRequestProperty("User-Agent", "AutoFlow-Android")
-                    status = redirectConnection.responseCode
-                    redirectCount++
-                }
+            var isSuccess = false
+            val apkFile = File(context.externalCacheDir ?: context.cacheDir, "aoto-mission_update.apk")
 
-                val totalLength = redirectConnection.contentLength
-                val inputStream = redirectConnection.inputStream
-                val outputStream = FileOutputStream(apkFile)
+            for (targetDownloadUrl in downloadUrlsToTry.distinct()) {
+                if (isSuccess) break
+                try {
+                    if (apkFile.exists()) apkFile.delete()
 
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var downloadedBytes = 0L
+                    val url = URL(targetDownloadUrl)
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty("User-Agent", "AutoFlow-Android")
+                    connection.instanceFollowRedirects = true
+                    connection.connectTimeout = 12000
+                    connection.readTimeout = 18000
 
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-                    if (totalLength > 0) {
-                        val progress = downloadedBytes.toFloat() / totalLength.toFloat()
-                        _updateState.value = _updateState.value.copy(downloadProgress = progress)
+                    var redirectConn = connection
+                    var status = redirectConn.responseCode
+                    var redirectCount = 0
+                    while ((status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == HttpURLConnection.HTTP_SEE_OTHER || status == 307 || status == 308) && redirectCount < 5) {
+                        val newUrl = redirectConn.getHeaderField("Location")
+                        redirectConn.disconnect()
+                        val target = URL(newUrl)
+                        redirectConn = target.openConnection() as HttpURLConnection
+                        redirectConn.setRequestProperty("User-Agent", "AutoFlow-Android")
+                        status = redirectConn.responseCode
+                        redirectCount++
                     }
+
+                    if (status != HttpURLConnection.HTTP_OK) {
+                        continue
+                    }
+
+                    val totalLength = redirectConn.contentLength
+                    val inputStream = redirectConn.inputStream
+                    val outputStream = FileOutputStream(apkFile)
+
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var downloadedBytes = 0L
+
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        downloadedBytes += bytesRead
+                        if (totalLength > 0) {
+                            val progress = downloadedBytes.toFloat() / totalLength.toFloat()
+                            _updateState.value = _updateState.value.copy(downloadProgress = progress)
+                        }
+                    }
+
+                    outputStream.flush()
+                    outputStream.close()
+                    inputStream.close()
+
+                    if (apkFile.length() > 1000000) {
+                        isSuccess = true
+                    }
+                } catch (_: Exception) {
                 }
+            }
 
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-
+            if (isSuccess) {
                 _updateState.value = _updateState.value.copy(
                     isDownloading = false,
                     downloadProgress = 1f
                 )
 
-                // Immediately launch package installer for zero-click install
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "下载完成，正在打开系统安装程序...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "最新独立 APK 获取成功，正在唤起安装...", Toast.LENGTH_SHORT).show()
                     installApk(context, apkFile)
                 }
-
-            } catch (e: Exception) {
-                // If direct link fails, open browser release page fallback
+            } else {
                 _updateState.value = _updateState.value.copy(
                     isDownloading = false,
-                    errorMessage = "后台下载异常，已准备直接打开下载页面"
+                    errorMessage = "直连获取异常，已直接打开 GitHub 仓库。"
                 )
                 withContext(Dispatchers.Main) {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL)).apply {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL)).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
-                    context.startActivity(browserIntent)
+                    context.startActivity(intent)
                 }
             }
         }
