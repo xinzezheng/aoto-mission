@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AutoFlow</string>
+    <string name="accessibility_service_description">AutoFlow accessibility service monitors app launches and executes configured automation task flows.</string>
+</resources>

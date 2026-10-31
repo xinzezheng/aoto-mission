@@ -1,0 +1,6 @@
+{
+  "name": "AutoFlow",
+  "description": "Android Task Automation & Scheduling Engine with interactive Permission Center, triggers, action flows, presets, and Room Database.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
