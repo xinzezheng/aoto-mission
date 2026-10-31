@@ -12,6 +12,8 @@ import com.example.engine.CountdownState
 import com.example.engine.TaskExecutionManager
 import com.example.permission.PermissionItem
 import com.example.permission.PermissionManager
+import com.example.update.AppUpdateManager
+import com.example.update.UpdateInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,7 @@ class AutomationViewModel(
     private val executionManager = TaskExecutionManager(context, repository)
 
     val activeCountdownState: StateFlow<CountdownState> = ActiveCountdownManager.countdownState
+    val updateState: StateFlow<UpdateInfo> = AppUpdateManager.updateState
 
     val rules: StateFlow<List<AutomationRule>> = repository.allRules
         .stateIn(
@@ -96,6 +99,18 @@ class AutomationViewModel(
 
     fun stopActiveCountdown() {
         ActiveCountdownManager.stopCountdown(context)
+    }
+
+    fun checkForSoftwareUpdates() {
+        viewModelScope.launch {
+            AppUpdateManager.checkForUpdates(context)
+        }
+    }
+
+    fun downloadAndInstallSoftwareUpdate() {
+        viewModelScope.launch {
+            AppUpdateManager.downloadAndInstallApk(context)
+        }
     }
 
     fun clearAllLogs() {

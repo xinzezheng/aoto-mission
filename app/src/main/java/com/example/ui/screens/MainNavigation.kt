@@ -3,7 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Icon
@@ -31,7 +31,7 @@ import com.example.ui.viewmodel.AutomationViewModel
 enum class NavigationTab(val title: String, val icon: ImageVector) {
     RULES("规则列表", Icons.Default.Schedule),
     PERMISSIONS("权限中心", Icons.Default.Security),
-    LOGS("运行日志", Icons.Default.History)
+    UPDATE("软件更新", Icons.Default.CloudDownload)
 }
 
 @Composable
@@ -44,9 +44,9 @@ fun MainNavigationScreen(
     var editingRule by remember { mutableStateOf<AutomationRule?>(null) }
 
     val rules by viewModel.rules.collectAsStateWithLifecycle()
-    val logs by viewModel.logs.collectAsStateWithLifecycle()
     val permissions by viewModel.permissionItems.collectAsStateWithLifecycle()
     val activeCountdownState by viewModel.activeCountdownState.collectAsStateWithLifecycle()
+    val updateInfo by viewModel.updateState.collectAsStateWithLifecycle()
 
     Scaffold(
         bottomBar = {
@@ -99,10 +99,11 @@ fun MainNavigationScreen(
                     modifier = screenModifier
                 )
             }
-            NavigationTab.LOGS -> {
-                ExecutionLogsScreen(
-                    logs = logs,
-                    onClearLogs = { viewModel.clearAllLogs() },
+            NavigationTab.UPDATE -> {
+                SoftwareUpdateScreen(
+                    updateInfo = updateInfo,
+                    onCheckUpdate = { viewModel.checkForSoftwareUpdates() },
+                    onDownloadAndInstall = { viewModel.downloadAndInstallSoftwareUpdate() },
                     modifier = screenModifier
                 )
             }
