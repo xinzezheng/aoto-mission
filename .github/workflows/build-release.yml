@@ -1,5 +1,5 @@
-name: 自动编译并发布 APK (Automated APK Build & Release)
-
+name: 土豆雷
+ 
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build-and-release:
-    name: 编译完整独立 APK 并上传至 GitHub Releases
+    name: 土豆雷
     runs-on: ubuntu-latest
 
     steps:
@@ -95,6 +95,7 @@ jobs:
 
       - name: 编译完整独立 APK (Assemble Standalone APK)
         env:
+          GRADLE_OPTS: "-Djava.awt.headless=true"
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: android
           KEY_PASSWORD: android
@@ -122,17 +123,13 @@ jobs:
           mkdir -p release_output
           cp ${{ steps.find_apk.outputs.apk_path }} release_output/app-release.apk
 
-      - name: 创建 GitHub Release 并发布产物 (Publish to GitHub Releases)
+      - name: 发布产物至 GitHub Releases (Publish to GitHub Releases)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
           tag_name: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
-          name: "AutoFlow 最新稳定版产物 (${{ github.ref_name }})"
-          body: |
-            ## 🚀 自动编译整合好的独立 APK 软件
-            - 软件版本: ${{ github.ref_name }}
-            - 包含完整的自动化执行引擎与所有依赖，可直接在手机上独立安装运行。
-            - 中国大陆用户支持通过镜像加速无 VPN 直连一键下载更新。
+          name: "土豆雷"
+          body: ""
           draft: false
           prerelease: false
           files: release_output/app-release.apk

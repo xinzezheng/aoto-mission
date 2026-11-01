@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">AutoFlow</string>
-    <string name="accessibility_service_description">AutoFlow accessibility service monitors app launches and executes configured automation task flows.</string>
+    <string name="app_name">土豆雷</string>
+    <string name="accessibility_service_description">土豆雷无障碍服务监控应用启动与退出并执行自动化任务。</string>
 </resources>

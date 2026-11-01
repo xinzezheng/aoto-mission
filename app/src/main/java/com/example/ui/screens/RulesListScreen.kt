@@ -251,7 +251,11 @@ fun ActiveCountdownCard(
 
                     Column {
                         Text(
-                            text = if (state.isRinging) "⏰ 时间到，请放下手机" else "⏳ 倒计时进行中",
+                            text = when {
+                                state.isRinging -> "时间到，请放下手机"
+                                state.isInExitGracePeriod -> "请在10秒内回到APP"
+                                else -> "倒计时进行中"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (state.isRinging) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
@@ -291,7 +295,11 @@ fun ActiveCountdownCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (state.isRinging) "00:00" else timeFormatted,
+                    text = when {
+                        state.isRinging -> "00:00"
+                        state.isInExitGracePeriod -> String.format("%02ds", state.exitGraceRemainingSeconds)
+                        else -> timeFormatted
+                    },
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontSize = 42.sp,
                         fontWeight = FontWeight.Black,

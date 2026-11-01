@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AutoFlow"
+rootProject.name = "土豆雷"
 
 include(":app")

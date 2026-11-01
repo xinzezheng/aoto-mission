@@ -29,7 +29,7 @@ class TaskExecutionManager(
 
     fun checkAndPromptPermissionsForExecution(): Boolean {
         if (!permissionManager.areNotificationsEnabled()) {
-            Toast.makeText(context, "缺少【通知权限】，请在设置中开启通知以展示提示与响铃", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "缺少通知权限，请在设置中开启通知以展示提示与响铃", Toast.LENGTH_LONG).show()
             permissionManager.checkAllPermissions().firstOrNull { it.id == "NOTIFICATION" }?.let {
                 permissionManager.openPermissionSettings(it)
             }
@@ -37,7 +37,7 @@ class TaskExecutionManager(
         }
 
         if (!permissionManager.canScheduleExactAlarms()) {
-            Toast.makeText(context, "缺少【精确闹钟】权限，请在设置中允许设置闹钟", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "缺少精确闹钟权限，请在设置中允许设置闹钟", Toast.LENGTH_LONG).show()
             permissionManager.checkAllPermissions().firstOrNull { it.id == "EXACT_ALARM" }?.let {
                 permissionManager.openPermissionSettings(it)
             }
@@ -47,6 +47,9 @@ class TaskExecutionManager(
         return true
     }
 
+    /**
+     * 执行规则任务：静默执行，不弹出任何多余提示打扰用户
+     */
     fun executeRule(rule: AutomationRule, triggerContextInfo: String = "") {
         coroutineScope.launch {
             var isSuccess = false
@@ -55,14 +58,12 @@ class TaskExecutionManager(
             try {
                 when (rule.actionType) {
                     ActionType.SET_ALARM -> {
-                        // User explicitly selected Countdown Alarm Action
                         ActiveCountdownManager.handleAppOpened(context, rule)
                         isSuccess = true
-                        message = "5分钟后放下手机"
+                        message = "倒计时已启动"
                     }
 
                     ActionType.LAUNCH_APP -> {
-                        // User selected Launch App Action
                         val packageName = rule.actionTargetPackage.ifEmpty { "com.android.settings" }
                         val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
                         if (launchIntent != null) {
@@ -81,7 +82,6 @@ class TaskExecutionManager(
                     }
 
                     ActionType.ADJUST_VOLUME -> {
-                        // User selected Volume Action
                         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                         val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                         val targetVolume = (maxVolume * (rule.actionValue.coerceIn(0, 100) / 100f)).toInt()
@@ -91,7 +91,6 @@ class TaskExecutionManager(
                     }
 
                     ActionType.ADJUST_BRIGHTNESS -> {
-                        // User selected Brightness Action
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.System.canWrite(context)) {
                             val brightnessValue = ((rule.actionValue.coerceIn(0, 100) / 100f) * 255).toInt()
                             Settings.System.putInt(
@@ -108,7 +107,7 @@ class TaskExecutionManager(
                             message = "屏幕亮度已调整至 ${rule.actionValue}%"
                         } else {
                             isSuccess = false
-                            message = "缺少【修改系统设置】权限"
+                            message = "缺少修改系统设置权限"
                             withContext(Dispatchers.Main) {
                                 permissionManager.checkAllPermissions().firstOrNull { it.id == "WRITE_SETTINGS" }?.let {
                                     permissionManager.openPermissionSettings(it)
@@ -118,14 +117,12 @@ class TaskExecutionManager(
                     }
 
                     ActionType.SEND_NOTIFICATION -> {
-                        // User selected Send Notification Action
-                        sendCustomNotification("⚡ 自动化任务触发: ${rule.title}", rule.description)
+                        sendCustomNotification("任务触发: ${rule.title}", rule.description)
                         isSuccess = true
                         message = "已成功发送通知"
                     }
 
                     ActionType.PERFORM_HOME_GESTURE -> {
-                        // User selected Home Gesture Action
                         val service = AutoFlowAccessibilityService.instance
                         if (service != null) {
                             service.performHomeAction()
@@ -133,7 +130,7 @@ class TaskExecutionManager(
                             message = "已自动执行返回桌面"
                         } else {
                             isSuccess = false
-                            message = "无障碍服务未开启，已为您打开无障碍设置"
+                            message = "无障碍服务未开启"
                             withContext(Dispatchers.Main) {
                                 permissionManager.checkAllPermissions().firstOrNull { it.id == "ACCESSIBILITY" }?.let {
                                     permissionManager.openPermissionSettings(it)
@@ -143,9 +140,7 @@ class TaskExecutionManager(
                     }
                 }
 
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "⚡ $message", Toast.LENGTH_SHORT).show()
-                }
+                // 静默执行：不弹出任何Toast提示
 
             } catch (e: Exception) {
                 isSuccess = false
@@ -171,18 +166,15 @@ class TaskExecutionManager(
     }
 
     /**
-     * 当满足退出条件时，直接中断并彻底销毁该规则关联的任务，停止所有计时与后续动作
+     * 当满足退出条件时，直接中断并彻底销毁该规则关联的任务，停止所有计时与后续动作（静默退出）
      */
     fun destroyOrInterruptRule(rule: AutomationRule, exitReason: String) {
         coroutineScope.launch {
-            // 如果此任务触发了倒计时或正在运行，立即停止并销毁倒计时
             if (ActiveCountdownManager.countdownState.value.ruleId == rule.id || rule.actionType == ActionType.SET_ALARM) {
                 ActiveCountdownManager.stopCountdown(context)
             }
 
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "🛑 满足退出条件，任务【${rule.title}】已自动销毁停止", Toast.LENGTH_SHORT).show()
-            }
+            // 静默退出：不弹出任何Toast提示
 
             val log = ExecutionLog(
                 ruleId = rule.id,
