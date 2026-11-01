@@ -1,5 +1,5 @@
 name: 土豆雷
- 
+
 on:
   push:
     branches:
@@ -39,7 +39,6 @@ jobs:
 
       - name: 准备密钥与环境文件 (Prepare Keystores and Environment)
         run: |
-          # 1. 恢复或生成 debug.keystore，确保 debugConfig 签名可用
           if [ -f "debug.keystore.base64" ]; then
             echo "正在从 base64 恢复 debug.keystore..."
             base64 -d debug.keystore.base64 > debug.keystore
@@ -48,13 +47,11 @@ jobs:
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          # 2. 生成发布版签名密钥库 my-upload-key.jks，确保 assembleRelease 签名可用
           if [ ! -f "my-upload-key.jks" ]; then
             echo "生成发布版签名库 my-upload-key.jks..."
             keytool -genkeypair -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=AutoFlow, OU=App, O=AutoFlow, L=City, ST=State, C=CN"
           fi
 
-          # 3. 验证 google-services.json 是否存在
           if [ ! -f "app/google-services.json" ]; then
             echo "生成备用 google-services.json..."
             cat << 'EOF' > app/google-services.json
@@ -152,12 +149,17 @@ jobs:
           gh release edit "$TAG_NAME" --title "土豆雷" --notes "" || true
 
       - name: 自动同步发布至 Gitee 发行版 (Sync to Gitee Releases)
-        if: env.GITEE_TOKEN != '' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "未检测到 GITEE_TOKEN，跳过 Gitee 同步..."
+            exit 0
+          fi
           echo "检测到已配置 GITEE_TOKEN，开始同步至 Gitee 发行版..."
           TAG_NAME="${{ github.ref_name == 'main' && 'latest' || github.ref_name }}"
+          
           RELEASE_RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/xinze0408/aoto-mission/releases" \
             -H "Content-Type: application/json" \
             -d "{\"access_token\":\"$GITEE_TOKEN\",\"tag_name\":\"$TAG_NAME\",\"name\":\"土豆雷\",\"body\":\"\"}")
