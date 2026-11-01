@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
@@ -71,7 +72,7 @@ fun SoftwareUpdateScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Minimal Version Banner Header
+            // Version Header Banner
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -165,12 +166,19 @@ fun SoftwareUpdateScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "版本更新状态",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column {
+                            Text(
+                                text = "版本更新状态",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "自动源: Gitee (国内直连)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -221,7 +229,7 @@ fun SoftwareUpdateScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // 1. Direct Background Fetch & Install APK Button
+                    // 1. Gitee 软件内自动检测并下载安装（主按钮）
                     Button(
                         onClick = onDownloadAndInstall,
                         modifier = Modifier
@@ -239,7 +247,7 @@ fun SoftwareUpdateScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (updateInfo.isDownloading) "正在后台下载 APK..." else "获取最新 APK 并安装",
+                            text = if (updateInfo.isDownloading) "正在从 Gitee 下载 APK..." else "从 Gitee 自动下载并安装",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
@@ -247,10 +255,30 @@ fun SoftwareUpdateScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 2. Open Gitee Repository Button
+                    // 2. GitHub 发行版网页手动下载按钮
                     OutlinedButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdateManager.GITEE_REPO_URL)).apply {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdateManager.GITHUB_RELEASES_URL)).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "前往 GitHub 发行版手动下载 APK", style = MaterialTheme.typography.labelLarge)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 3. Gitee 发行版网页按钮
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdateManager.GITEE_RELEASES_URL)).apply {
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             context.startActivity(intent)
@@ -262,7 +290,7 @@ fun SoftwareUpdateScreen(
                     ) {
                         Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "打开 Gitee 数据库网页", style = MaterialTheme.typography.labelLarge)
+                        Text(text = "打开 Gitee 仓库发行版网页", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }

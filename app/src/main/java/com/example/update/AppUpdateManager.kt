@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -32,8 +31,11 @@ data class UpdateInfo(
 object AppUpdateManager {
 
     const val GITEE_REPO_URL = "https://gitee.com/xinze0408/aoto-mission"
+    const val GITEE_RELEASES_URL = "https://gitee.com/xinze0408/aoto-mission/releases"
+    const val GITHUB_REPO_URL = "https://github.com/xinzezheng/aoto-mission"
+    const val GITHUB_RELEASES_URL = "https://github.com/xinzezheng/aoto-mission/releases"
+
     private const val GITEE_API_LATEST_RELEASE = "https://gitee.com/api/v5/repos/xinze0408/aoto-mission/releases/latest"
-    private const val GITEE_API_ALL_RELEASES = "https://gitee.com/api/v5/repos/xinze0408/aoto-mission/releases"
 
     private val _updateState = MutableStateFlow(UpdateInfo())
     val updateState: StateFlow<UpdateInfo> = _updateState.asStateFlow()
@@ -68,7 +70,6 @@ object AppUpdateManager {
                     val jsonObject = JSONObject(responseJson)
                     tagName = jsonObject.optString("tag_name", "latest")
 
-                    // 1. 尝试从 assets 解析 APK 下载地址
                     val assets = jsonObject.optJSONArray("assets")
                     if (assets != null) {
                         for (i in 0 until assets.length()) {
@@ -82,7 +83,6 @@ object AppUpdateManager {
                         }
                     }
 
-                    // 2. 尝试从 attach_files 解析
                     if (foundApkUrl.isEmpty()) {
                         val attachFiles = jsonObject.optJSONArray("attach_files")
                         if (attachFiles != null) {
@@ -98,7 +98,6 @@ object AppUpdateManager {
                     }
                 }
 
-                // 如果未在响应中解析到具体文件，使用 Gitee 发行版标准下载地址
                 if (foundApkUrl.isEmpty()) {
                     foundApkUrl = "https://gitee.com/xinze0408/aoto-mission/releases/download/$tagName/app-release.apk"
                 }
@@ -108,8 +107,7 @@ object AppUpdateManager {
                     apkDownloadUrl = foundApkUrl,
                     isChecking = false
                 )
-            } catch (e: Exception) {
-                // 默认采用 Gitee 发行版直接下载链接
+            } catch (_: Exception) {
                 _updateState.value = _updateState.value.copy(
                     isChecking = false,
                     latestTagName = "最新版",
@@ -158,6 +156,8 @@ object AppUpdateManager {
             downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/releases/download/latest/app-release.apk")
             downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/raw/master/app-release.apk")
             downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/raw/main/app-release.apk")
+            downloadUrlsToTry.add("https://ghfast.top/https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk")
+            downloadUrlsToTry.add("https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk")
 
             var isSuccess = false
             val apkFile = File(context.externalCacheDir ?: context.cacheDir, "tudoulei_update.apk")
@@ -213,7 +213,6 @@ object AppUpdateManager {
                     outputStream.close()
                     inputStream.close()
 
-                    // 检查 APK 文件有效性（需大于 500KB 且非 HTML 网页）
                     if (apkFile.length() > 500000) {
                         isSuccess = true
                     }
@@ -233,10 +232,10 @@ object AppUpdateManager {
             } else {
                 _updateState.value = _updateState.value.copy(
                     isDownloading = false,
-                    errorMessage = "Gitee 暂未上传或未发布 APK 文件，已为您打开 Gitee 仓库。"
+                    errorMessage = "自动下载未完成，可点击下方按钮在 Gitee 或 GitHub 网页手动下载。"
                 )
                 withContext(Dispatchers.Main) {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITEE_REPO_URL)).apply {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITEE_RELEASES_URL)).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
