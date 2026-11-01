@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: 检出源码 (Checkout Repository)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 配置 JDK 17 (Setup Java 17)
         uses: actions/setup-java@v4
@@ -159,6 +161,13 @@ jobs:
           fi
           echo "检测到已配置 GITEE_TOKEN，开始同步至 Gitee 发行版..."
           TAG_NAME="${{ github.ref_name == 'main' && 'latest' || github.ref_name }}"
+          
+          # 自动在 Git 中创建并推送对应标签，解决 Gitee 找不到 Tag 的问题
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -d "$TAG_NAME" 2>/dev/null || true
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME" --force || true
           
           RELEASE_RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/xinze/aoto-mission/releases" \
             -H "Content-Type: application/json" \
