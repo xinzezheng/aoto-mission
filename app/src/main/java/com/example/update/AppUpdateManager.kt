@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -30,15 +31,9 @@ data class UpdateInfo(
 
 object AppUpdateManager {
 
-    const val GITHUB_REPO_URL = "https://github.com/xinzezheng/aoto-mission"
-    private const val GITHUB_API_LATEST_RELEASE = "https://api.github.com/repos/xinzezheng/aoto-mission/releases/latest"
-
-    // High-speed CDN mirror accelerators for China Mainland users (No VPN required)
-    private val CHINA_CDN_MIRRORS = listOf(
-        "https://ghfast.top/https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk",
-        "https://ghproxy.net/https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk",
-        "https://github.com/xinzezheng/aoto-mission/releases/download/latest/app-release.apk"
-    )
+    const val GITEE_REPO_URL = "https://gitee.com/xinze0408/aoto-mission"
+    private const val GITEE_API_LATEST_RELEASE = "https://gitee.com/api/v5/repos/xinze0408/aoto-mission/releases/latest"
+    private const val GITEE_API_ALL_RELEASES = "https://gitee.com/api/v5/repos/xinze0408/aoto-mission/releases"
 
     private val _updateState = MutableStateFlow(UpdateInfo())
     val updateState: StateFlow<UpdateInfo> = _updateState.asStateFlow()
@@ -58,53 +53,67 @@ object AppUpdateManager {
 
         withContext(Dispatchers.IO) {
             try {
-                val url = URL(GITHUB_API_LATEST_RELEASE)
+                val url = URL(GITEE_API_LATEST_RELEASE)
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
-                connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-                connection.setRequestProperty("User-Agent", "AutoFlow-Android")
-                connection.connectTimeout = 6000
-                connection.readTimeout = 6000
+                connection.setRequestProperty("User-Agent", "TuDouLei-Android")
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+
+                var tagName = "latest"
+                var foundApkUrl = ""
 
                 if (connection.responseCode == 200) {
                     val responseJson = connection.inputStream.bufferedReader().use { it.readText() }
                     val jsonObject = JSONObject(responseJson)
-                    val tagName = jsonObject.optString("tag_name", "v1.0.0")
+                    tagName = jsonObject.optString("tag_name", "latest")
 
-                    var rawApkUrl = ""
-                    val assetsArray = jsonObject.optJSONArray("assets")
-                    if (assetsArray != null) {
-                        for (i in 0 until assetsArray.length()) {
-                            val asset = assetsArray.getJSONObject(i)
+                    // 1. 尝试从 assets 解析 APK 下载地址
+                    val assets = jsonObject.optJSONArray("assets")
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(i)
                             val name = asset.optString("name", "")
-                            if (name.endsWith(".apk", ignoreCase = true)) {
-                                rawApkUrl = asset.optString("browser_download_url", "")
+                            val downloadUrl = asset.optString("browser_download_url", "")
+                            if (name.endsWith(".apk", ignoreCase = true) && downloadUrl.isNotEmpty()) {
+                                foundApkUrl = downloadUrl
                                 break
                             }
                         }
                     }
 
-                    if (rawApkUrl.isEmpty()) {
-                        rawApkUrl = "https://github.com/xinzezheng/aoto-mission/releases/download/$tagName/app-release.apk"
+                    // 2. 尝试从 attach_files 解析
+                    if (foundApkUrl.isEmpty()) {
+                        val attachFiles = jsonObject.optJSONArray("attach_files")
+                        if (attachFiles != null) {
+                            for (i in 0 until attachFiles.length()) {
+                                val fileObj = attachFiles.getJSONObject(i)
+                                val downloadUrl = fileObj.optString("download_url", "")
+                                if (downloadUrl.endsWith(".apk", ignoreCase = true) || downloadUrl.contains("apk")) {
+                                    foundApkUrl = downloadUrl
+                                    break
+                                }
+                            }
+                        }
                     }
-
-                    _updateState.value = _updateState.value.copy(
-                        latestTagName = tagName,
-                        apkDownloadUrl = rawApkUrl,
-                        isChecking = false
-                    )
-                } else {
-                    _updateState.value = _updateState.value.copy(
-                        latestTagName = "最新版",
-                        apkDownloadUrl = CHINA_CDN_MIRRORS.first(),
-                        isChecking = false
-                    )
                 }
-            } catch (_: Exception) {
+
+                // 如果未在响应中解析到具体文件，使用 Gitee 发行版标准下载地址
+                if (foundApkUrl.isEmpty()) {
+                    foundApkUrl = "https://gitee.com/xinze0408/aoto-mission/releases/download/$tagName/app-release.apk"
+                }
+
+                _updateState.value = _updateState.value.copy(
+                    latestTagName = if (tagName.isNotEmpty()) tagName else "最新版",
+                    apkDownloadUrl = foundApkUrl,
+                    isChecking = false
+                )
+            } catch (e: Exception) {
+                // 默认采用 Gitee 发行版直接下载链接
                 _updateState.value = _updateState.value.copy(
                     isChecking = false,
                     latestTagName = "最新版",
-                    apkDownloadUrl = CHINA_CDN_MIRRORS.first()
+                    apkDownloadUrl = "https://gitee.com/xinze0408/aoto-mission/releases/download/latest/app-release.apk"
                 )
             }
         }
@@ -130,7 +139,7 @@ object AppUpdateManager {
 
         var downloadUrl = _updateState.value.apkDownloadUrl
         if (downloadUrl.isEmpty()) {
-            downloadUrl = CHINA_CDN_MIRRORS.first()
+            downloadUrl = "https://gitee.com/xinze0408/aoto-mission/releases/download/latest/app-release.apk"
         }
 
         _updateState.value = _updateState.value.copy(
@@ -141,16 +150,17 @@ object AppUpdateManager {
 
         withContext(Dispatchers.IO) {
             val downloadUrlsToTry = mutableListOf<String>()
-
-            if (downloadUrl.isNotEmpty() && downloadUrl.endsWith(".apk")) {
-                downloadUrlsToTry.add("https://ghfast.top/$downloadUrl")
-                downloadUrlsToTry.add("https://ghproxy.net/$downloadUrl")
-                downloadUrlsToTry.add(downloadUrl)
+            downloadUrlsToTry.add(downloadUrl)
+            val tagName = _updateState.value.latestTagName
+            if (tagName.isNotEmpty() && tagName != "最新版") {
+                downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/releases/download/$tagName/app-release.apk")
             }
-            downloadUrlsToTry.addAll(CHINA_CDN_MIRRORS)
+            downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/releases/download/latest/app-release.apk")
+            downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/raw/master/app-release.apk")
+            downloadUrlsToTry.add("https://gitee.com/xinze0408/aoto-mission/raw/main/app-release.apk")
 
             var isSuccess = false
-            val apkFile = File(context.externalCacheDir ?: context.cacheDir, "aoto-mission_update.apk")
+            val apkFile = File(context.externalCacheDir ?: context.cacheDir, "tudoulei_update.apk")
 
             for (targetDownloadUrl in downloadUrlsToTry.distinct()) {
                 if (isSuccess) break
@@ -160,10 +170,10 @@ object AppUpdateManager {
                     val url = URL(targetDownloadUrl)
                     val connection = url.openConnection() as HttpURLConnection
                     connection.requestMethod = "GET"
-                    connection.setRequestProperty("User-Agent", "AutoFlow-Android")
+                    connection.setRequestProperty("User-Agent", "TuDouLei-Android")
                     connection.instanceFollowRedirects = true
                     connection.connectTimeout = 12000
-                    connection.readTimeout = 18000
+                    connection.readTimeout = 20000
 
                     var redirectConn = connection
                     var status = redirectConn.responseCode
@@ -173,7 +183,7 @@ object AppUpdateManager {
                         redirectConn.disconnect()
                         val target = URL(newUrl)
                         redirectConn = target.openConnection() as HttpURLConnection
-                        redirectConn.setRequestProperty("User-Agent", "AutoFlow-Android")
+                        redirectConn.setRequestProperty("User-Agent", "TuDouLei-Android")
                         status = redirectConn.responseCode
                         redirectCount++
                     }
@@ -203,11 +213,11 @@ object AppUpdateManager {
                     outputStream.close()
                     inputStream.close()
 
-                    if (apkFile.length() > 1000000) {
+                    // 检查 APK 文件有效性（需大于 500KB 且非 HTML 网页）
+                    if (apkFile.length() > 500000) {
                         isSuccess = true
                     }
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
 
             if (isSuccess) {
@@ -223,10 +233,10 @@ object AppUpdateManager {
             } else {
                 _updateState.value = _updateState.value.copy(
                     isDownloading = false,
-                    errorMessage = "直连获取异常，已直接打开 GitHub 仓库。"
+                    errorMessage = "Gitee 暂未上传或未发布 APK 文件，已为您打开 Gitee 仓库。"
                 )
                 withContext(Dispatchers.Main) {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL)).apply {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITEE_REPO_URL)).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)

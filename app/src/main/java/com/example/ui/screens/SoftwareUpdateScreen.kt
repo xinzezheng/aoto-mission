@@ -247,10 +247,10 @@ fun SoftwareUpdateScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 2. Open GitHub Database Repository Button
+                    // 2. Open Gitee Repository Button
                     OutlinedButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdateManager.GITHUB_REPO_URL)).apply {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdateManager.GITEE_REPO_URL)).apply {
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             context.startActivity(intent)
@@ -262,7 +262,7 @@ fun SoftwareUpdateScreen(
                     ) {
                         Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "打开 GitHub 数据库网页", style = MaterialTheme.typography.labelLarge)
+                        Text(text = "打开 Gitee 数据库网页", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
