@@ -171,6 +171,10 @@ class TaskExecutionManager(
     fun destroyOrInterruptRule(rule: AutomationRule, exitReason: String) {
         coroutineScope.launch {
             if (ActiveCountdownManager.countdownState.value.ruleId == rule.id || rule.actionType == ActionType.SET_ALARM) {
+                // 如果倒计时正在运行且处于10秒宽限期内，由10秒返回恢复逻辑全权管理，不提前粗暴销毁
+                if (ActiveCountdownManager.countdownState.value.isInExitGracePeriod) {
+                    return@launch
+                }
                 ActiveCountdownManager.stopCountdown(context)
             }
 

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.example.data.AppDatabase
 import com.example.data.AutomationRepository
+import com.example.engine.ActiveCountdownManager
 import com.example.engine.TaskExecutionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,12 @@ class AlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null || intent == null) return
+
+        if (intent.action == ACTION_DISMISS_ALARM) {
+            Log.d("AlarmReceiver", "收到关闭闹钟响铃广播")
+            ActiveCountdownManager.stopCountdown(context.applicationContext)
+            return
+        }
 
         val ruleId = intent.getLongExtra(EXTRA_RULE_ID, -1L)
         val ruleTitle = intent.getStringExtra(EXTRA_RULE_TITLE) ?: "定时响铃任务"
@@ -45,5 +52,6 @@ class AlarmReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_RULE_ID = "extra_rule_id"
         const val EXTRA_RULE_TITLE = "extra_rule_title"
+        const val ACTION_DISMISS_ALARM = "com.example.action.DISMISS_ALARM"
     }
 }

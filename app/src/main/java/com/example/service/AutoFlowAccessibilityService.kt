@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
+import com.example.data.ActionType
 import com.example.data.AppDatabase
 import com.example.data.AutomationRepository
 import com.example.data.ExitTriggerType
@@ -64,6 +66,17 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
 
+            // 0. 极速锁定拦截：相对应的APP在退出后的10秒内，如果再次想进入APP的话，强制退出APP（多次点击进入依然强制退出）
+            if (ActiveCountdownManager.isPackageLocked(packageName)) {
+                Log.d("AutoFlowAccessibility", "目标应用处于10秒锁定冷却期，立即强制退出并返回桌面: $packageName")
+                performHomeAction()
+                val remaining = ActiveCountdownManager.getLockdownRemainingSeconds()
+                serviceScope.launch(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, "时间已到！10秒内禁止重新进入（剩余 ${remaining} 秒）", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+
             // 忽略本应用、系统UI状态栏通知面板、以及所有输入法（输入法打字均视作原应用内操作）
             if (packageName == this.packageName || systemUiPackages.contains(packageName) || isInputMethodPackage(packageName)) {
                 return
@@ -83,12 +96,12 @@ class AutoFlowAccessibilityService : AccessibilityService() {
                 }
 
                 if (isNowInTarget) {
-                    // 用户返回了监控应用：立即取消退出等待并继续任务
+                    // 用户在10秒内返回了监控应用：立即取消退出等待，继续之前的计时进度（绝不重新开始5分钟）
                     if (activeCountdown.isInExitGracePeriod) {
                         ActiveCountdownManager.onTargetAppReturned(applicationContext)
                     }
                 } else {
-                    // 用户离开了监控应用：立即启动10秒快速返回提醒与超时销毁机制
+                    // 用户离开了监控应用：立即启动10秒快速返回提醒（10秒内未返回才彻底停止）
                     ActiveCountdownManager.onTargetAppExited(applicationContext)
                 }
             }
@@ -108,9 +121,13 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         val activeRules = repository.getActiveRulesList()
 
         // 1. 检查退出条件：只要离开所选应用（满足退出条件），直接静默销毁并中断该任务
+        // 注意：如果是 SET_ALARM 倒计时规则，且倒计时正在运行或在10秒宽限期内，绝不能直接粗暴销毁，由 ActiveCountdownManager 统一管理10秒宽限期与返回恢复！
         if (!previousPackage.isNullOrEmpty()) {
             val exitRules = activeRules.filter { rule ->
                 if (rule.exitTriggerType != ExitTriggerType.APP_EXIT) return@filter false
+                if (rule.actionType == ActionType.SET_ALARM && ActiveCountdownManager.countdownState.value.isRunning) {
+                    return@filter false
+                }
                 val targetPackages = rule.exitTriggerPackageName.ifEmpty { rule.triggerPackageName }
                     .split(",")
                     .map { it.trim() }
@@ -128,8 +145,12 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         }
 
         // 2. 检查启动条件：打开应用时触发相应任务（静默执行）
+        // 注意：如果倒计时已经在运行（或者正在10秒内返回继续计时），绝不要重复执行或重置倒计时！
         val launchRules = activeRules.filter { rule ->
             if (rule.triggerType != TriggerType.APP_LAUNCH) return@filter false
+            if (rule.actionType == ActionType.SET_ALARM && ActiveCountdownManager.countdownState.value.isRunning) {
+                return@filter false
+            }
             val targetPackages = rule.triggerPackageName.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             targetPackages.any { target ->
                 currentPackage.equals(target, ignoreCase = true) || currentPackage.contains(target, ignoreCase = true)
