@@ -51,29 +51,6 @@ class AutomationViewModel(
 
     init {
         refreshPermissions()
-        initializeDefaultRuleIfEmpty()
-    }
-
-    private fun initializeDefaultRuleIfEmpty() {
-        viewModelScope.launch {
-            val rules = repository.getActiveRulesList()
-            if (rules.isEmpty()) {
-                val defaultRule = AutomationRule(
-                    title = "短视频与社区应用 5分钟定时响铃",
-                    description = "打开抖音、TikTok、小红书或哔哩哔哩时自动开启5分钟倒计时，离开应用10秒后自动停止",
-                    isEnabled = true,
-                    triggerType = com.example.data.TriggerType.APP_LAUNCH,
-                    triggerPackageName = "com.ss.android.ugc.aweme,com.zhiliaoapp.musically,com.xingin.xhs,tv.danmaku.bili",
-                    triggerAppLabel = "抖音 / TikTok / 小红书 / 哔哩哔哩",
-                    exitTriggerType = com.example.data.ExitTriggerType.APP_EXIT,
-                    exitTriggerPackageName = "com.ss.android.ugc.aweme,com.zhiliaoapp.musically,com.xingin.xhs,tv.danmaku.bili",
-                    exitTriggerAppLabel = "抖音 / TikTok / 小红书 / 哔哩哔哩",
-                    actionType = com.example.data.ActionType.SET_ALARM,
-                    actionValue = 5
-                )
-                repository.insertRule(defaultRule)
-            }
-        }
     }
 
     fun refreshPermissions() {
@@ -110,6 +87,9 @@ class AutomationViewModel(
 
     fun deleteRule(rule: AutomationRule) {
         viewModelScope.launch {
+            if (ActiveCountdownManager.countdownState.value.ruleId == rule.id) {
+                ActiveCountdownManager.stopCountdown(context)
+            }
             repository.deleteRule(rule)
         }
     }

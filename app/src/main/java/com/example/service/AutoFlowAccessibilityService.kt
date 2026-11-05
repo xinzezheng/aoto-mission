@@ -119,6 +119,9 @@ class AutoFlowAccessibilityService : AccessibilityService() {
         val executionManager = TaskExecutionManager(applicationContext, repository)
 
         val activeRules = repository.getActiveRulesList()
+        if (activeRules.isEmpty()) {
+            return
+        }
 
         // 1. 检查退出条件：只要离开所选应用（满足退出条件），直接静默销毁并中断该任务
         // 注意：如果是 SET_ALARM 倒计时规则，且倒计时正在运行或在10秒宽限期内，绝不能直接粗暴销毁，由 ActiveCountdownManager 统一管理10秒宽限期与返回恢复！
